@@ -163,8 +163,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if fi.Size() == 0 {
-		log.Fatal("stdin is empty")
+
+	if fi.Mode()&os.ModeNamedPipe == 0 {
+		if fi.Size() == 0 {
+			log.Fatal("stdin is empty")
+		}
 	}
 
 	data, err := ioutil.ReadAll(os.Stdin)
