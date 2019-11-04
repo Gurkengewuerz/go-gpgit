@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -62,7 +63,7 @@ func isPGPMessage(msg string) (bool, error) {
 	return matched, err
 }
 
-func isEncrypted(mail *message.Entity) (bool) {
+func isEncrypted(mail *message.Entity) bool {
 	t, _, _ := mail.Header.ContentType()
 	if strings.ToLower(t) == "multipart/encrypted" {
 		return true
@@ -131,6 +132,18 @@ func encryptEML(eml string, armoredKeyRing *string) {
 }
 
 func main() {
+	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if !strings.HasPrefix(dir, os.TempDir()) {
+		err = os.Chdir(dir)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	cfg, err := ini.Load("config.ini")
 	if err != nil {
 		fmt.Printf("Fail to read file: %v", err)
