@@ -128,7 +128,7 @@ func encryptEML(eml string, armoredKeyRing *string) {
 		log.Fatal(err)
 	}
 
-	log.Println(b.String())
+	fmt.Print(b.String())
 }
 
 func main() {
