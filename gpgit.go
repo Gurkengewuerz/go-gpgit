@@ -13,8 +13,8 @@ import (
 	"regexp"
 	"strings"
 
+	"git.gurkengewuerz.de/Gurkengewuerz/go-gpgmime"
 	"github.com/emersion/go-message"
-	"github.com/emersion/go-pgpmime"
 	"gopkg.in/ini.v1"
 	"gopkg.in/ldap.v3"
 )
@@ -91,6 +91,9 @@ func encryptEML(eml string, armoredKeyRing *string) {
 		log.Fatal(err)
 	}
 
+	origMimeVersion := m.Header.Get("MIME-Version")
+	origContentType := m.Header.Get("Content-Type")
+
 	if isEncrypted(m) {
 		log.Print(eml)
 		os.Exit(0)
@@ -119,6 +122,29 @@ func encryptEML(eml string, armoredKeyRing *string) {
 	}
 	// Set the PGP/MIME writer output to the mail body
 	ciphertext.Writer = mw
+
+	// Write the cleartext body
+	if b, err := ioutil.ReadAll(m.Body); err == nil {
+		if origMimeVersion != "" {
+			origContentType = "Content-Type: " + origContentType
+			origContentType = strings.Replace(origContentType, "\r\n", "", 1)
+			origContentType = strings.Replace(origContentType, "\n", "", 1)
+
+			pat := regexp.MustCompile(`Type:\s*(.*?);\sboundary="(.*?)"`)
+			matches := pat.FindAllStringSubmatch(origContentType, -1)
+
+			if len(matches) == 0 {
+				os.Exit(1)
+			}
+
+			_, _ = io.WriteString(cleartext, fmt.Sprintf("Content-Type: %s;\n boundary=\"%s\"\n\n", matches[0][1], matches[0][2]))
+		}
+
+		_, err = io.WriteString(cleartext, string(b))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	// Close all writers
 	if err := cleartext.Close(); err != nil {
