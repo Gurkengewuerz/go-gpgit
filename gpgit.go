@@ -123,6 +123,8 @@ func encryptEML(eml string, armoredKeyRing *string) {
 	// Set the PGP/MIME writer output to the mail body
 	ciphertext.Writer = mw
 
+	_, _ = io.WriteString(ciphertext.Writer, "This is an OpenPGP/MIME encrypted message (RFC 4880 and 3156)\n")
+
 	// Write the cleartext body
 	if b, err := ioutil.ReadAll(m.Body); err == nil {
 		if origMimeVersion != "" {
