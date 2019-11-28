@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"database/sql"
 	"fmt"
 	"golang.org/x/crypto/openpgp"
 	"io"
@@ -15,13 +16,14 @@ import (
 
 	"git.gurkengewuerz.de/Gurkengewuerz/go-gpgmime"
 	"github.com/emersion/go-message"
+	_ "github.com/go-sql-driver/mysql"
 	"gopkg.in/ini.v1"
 	"gopkg.in/ldap.v3"
 )
 
 var config *ini.File
 
-func getArmoredKeyRing(recipient *string) (string, error) {
+func getArmoredKeyRing_ldap(recipient *string) (string, error) {
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 	}
@@ -56,6 +58,63 @@ func getArmoredKeyRing(recipient *string) (string, error) {
 
 	entry := sr.Entries[0]
 	return entry.GetAttributeValue(keyAttribute), nil
+}
+
+type pgpSQL struct {
+	pgpKey string
+}
+
+func getArmoredKeyRing_mysql(recipient *string) (string, error) {
+	db, err := sql.Open(
+		"mysql",
+		fmt.Sprintf(
+			"%s:%s@tcp(%s:%s)/%s",
+			config.Section("mysql").Key("username").String(),
+			config.Section("mysql").Key("password").String(),
+			config.Section("mysql").Key("host").String(),
+			config.Section("mysql").Key("port").String(),
+			config.Section("mysql").Key("database").String()))
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	components := strings.Split(*recipient, "@")
+	username, domain := components[0], components[1]
+
+	query := config.Section("mysql").Key("query").String()
+	query = strings.Replace(query, "%u", username, 1)
+	query = strings.Replace(query, "%d", domain, 1)
+
+	row := db.QueryRow(query)
+
+	var key pgpSQL
+	err = row.Scan(&key.pgpKey)
+
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("no entries for user %s at domain %s", username, domain)
+	}
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = db.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return key.pgpKey, nil
+}
+
+func getArmoredKeyRing(recipient *string) (string, error) {
+	backend := strings.ToLower(config.Section("").Key("backend").String())
+	if backend == "ldap" {
+		return getArmoredKeyRing_ldap(recipient)
+	} else if backend == "mysql" {
+		return getArmoredKeyRing_mysql(recipient)
+	}
+	return "", fmt.Errorf("unknown backend option %s", backend)
 }
 
 func isPGPMessage(msg string) (bool, error) {
